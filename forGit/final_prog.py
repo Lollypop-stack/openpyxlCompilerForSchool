@@ -11,8 +11,8 @@ from openpyxl import load_workbook
 from pathlib import Path
 import re
 
-# import tkinter as tk
-# from tkinter import messagebox, filedialog
+import tkinter as tk
+from tkinter import messagebox, ttk
 
 
 class RThread(Thread):
@@ -44,15 +44,11 @@ class Grade:
         """
         Создание Excel файла с данными о предмете.
         """
+        os.makedirs(path, exist_ok=True)
         path = f"{path}/{self.grade}-{self.quarter}.xlsx"
         with pd.ExcelWriter(path, engine="xlsxwriter") as writer:
-            for i in self.subjects.items():
-                subject = i[0]
-                table = i[1]
-
+            for subject, table in self.subjects.items():
                 table.to_excel(writer, sheet_name=subject)
-
-        print(f'file "{path}" created')
 
     def print_subjects(self):
         """
@@ -78,15 +74,11 @@ class KParser:
     def __init__(self) -> None:
         # Настраиваем заголовки для HTTP-запросов
         self.__headers = {
-            "cookie": f"language=ru; session={os.getenv('SESSION')}; deferApp=true; string=670fbb44e3637",
+            "cookie": "language=ru; session=j4jrc9k0qgublh2ih1j6en0vuob9hf2t; deferApp=true; string=6751e3e2be5ae",
             "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
             "accept-language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
             "cache-control": "max-age=0",
             "dnt": "1",
-            "priority": "u=0, i",
-            "^sec-ch-ua": r"^\^Not/A",
-            "sec-ch-ua-mobile": "?0",
-            "^sec-ch-ua-platform": r"^\^Windows^^^",
             "sec-fetch-dest": "document",
             "sec-fetch-mode": "navigate",
             "sec-fetch-site": "none",
@@ -95,6 +87,7 @@ class KParser:
             "upgrade-insecure-requests": "1",
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.6324.206 Safari/537.36",
         }
+
         self.url = "https://kundoluk.edu.kg/journal2"  # Базовый URL для запросов
         self.s = (
             requests.Session()
@@ -127,10 +120,6 @@ class KParser:
     def get_grade(self, grade: tuple[str, int], quarter: int = 1) -> Grade:
         """
         Получение данных для конкретного класса и четверти.
-
-        Args:
-            grade (tuple[str, int]): Класс и его ID
-            quarter (int): Номер четверти
 
         Returns:
             Grade: Объект Grade с данными класса
@@ -203,59 +192,48 @@ class KParser:
         return table
 
 
-    def magic(self) -> None:
+    def magic(self, grade, quarter) -> None:
         """
-        Основная логика обработки пользовательского ввода из консоли.
+        Основная логика обработки пользовательского ввода, полученного через tkinter.
         """
         try:
-            while True:
-                try:
-                    inpGrade = input("Введите класс (Пример: 4Б): ").upper()
-                    inpQuarter = input("Введите четверть: ").strip()
+            # Получаем данные о классе
+            grades = dict(self.grades)
+            gradeId = grades.get(grade)
 
-                    if not inpQuarter.isdigit() or not inpGrade:
-                        print("Неверный ввод. Попробуйте снова.")
-                        continue
+            if not gradeId or quarter <= 0:
+                print("Класс или четверть указаны неверно.")
+                return
 
-                    inpQuarter = int(inpQuarter)
-                    grades = dict(self.grades)
-                    gradeId = grades.get(inpGrade)
+            # Получение данных о классе
+            grade_data = self.get_grade((grade, gradeId), quarter)
 
-                    if not gradeId or inpQuarter <= 0:
-                        print("Класс или четверть указаны неверно. Попробуйте снова.")
-                        continue
+            # Убедитесь, что директория существует
+            output_dir = os.path.join(os.getcwd(), 'data')  # Папка 'data' рядом с программой
+            os.makedirs(output_dir, exist_ok=True)
 
-                    # Получение данных о классе
-                    grade = self.get_grade((inpGrade, gradeId), inpQuarter)
+            # Создаем путь к файлам
+            input_file = os.path.join(output_dir, f'{grade}-{quarter}.xlsx')
+            grade_data.to_excel(input_file)
 
-                    # Убедитесь, что директория существует
-                    output_dir = os.path.join(os.getcwd(), 'data')  # Папка 'data' рядом с программой
-                    os.makedirs(output_dir, exist_ok=True)
+            # Генерация output_file
+            output_file = os.path.join(output_dir, f'{grade}-{quarter}-result.xlsx')
+            print(f"Генерация файла: {output_file}")
 
-                    # Создаем путь к файлам
-                    input_file = os.path.join(output_dir, f'{inpGrade}-{inpQuarter}.xlsx')
-                    grade.to_excel(input_file)
+            # Проверка на существование output_file
+            if not output_file:
+                raise ValueError("Неверный путь для выходного файла.")
 
-                    # Генерация output_file
-                    output_file = os.path.join(output_dir, f'{inpGrade}-{inpQuarter}-result.xlsx')
-                    print(f"Генерация файла: {output_file}")
+            # Обрабатываем данные и сохраняем в новый файл
+            calculate_averages(input_file, output_file)
 
-                    # Проверка на существование output_file
-                    if not output_file:
-                        raise ValueError("Неверный путь для выходного файла.")
+            print(f'Результаты сохранены в файл: {output_file}')
 
-                    # Обрабатываем данные и сохраняем в новый файл
-                    calculate_averages(input_file, output_file)
-
-                    print(f'Результаты сохранены в файл: {output_file}')
-                    break
-                except Exception as e:
-                    import traceback
-                    print(f"Ошибка: {e}")
-                    print("Traceback:")
-                    print(traceback.format_exc())  # Вывод полного traceback
-        except KeyboardInterrupt:
-            print("\nПрограмма была завершена пользователем.")
+        except Exception as e:
+            import traceback
+            print(f"Ошибка: {e}")
+            print("Traceback:")
+            print(traceback.format_exc())  # Вывод полного traceback
 
 
 def extract_digit(text):
@@ -263,120 +241,186 @@ def extract_digit(text):
     match = re.search(r'[\d,\.]+', text)
     return float(match.group().replace(',', '.')) if match else 0.0  # Обрабатываем как дробное число
 
+
+def is_file_open(file_path):
+    """Проверяет, открыт ли файл в другой программе."""
+    try:
+        os.rename(file_path, file_path)  # Пытаемся переименовать файл
+        return False  # Если удается, файл не открыт
+    except OSError:
+        return True  # Если ошибка, значит файл открыт
+
+def check_file_access(file_path):
+    """Проверяет, можно ли записывать в файл."""
+    try:
+        # Пробуем открыть файл на запись
+        with open(file_path, 'a'):
+            return True
+    except PermissionError:
+        return False
+
 def calculate_averages(input_file, output_file):
-    wb = load_workbook(input_file)
+    input_file = Path(input_file).as_posix()
 
-    # Создаем лист для результатов
-    result_sheet = wb.create_sheet('Result')
+    # Проверка на существование входного файла
+    if not os.path.exists(input_file):
+        raise FileNotFoundError(f"Файл не найден: {input_file}")
+
+    # Проверка, открыт ли файл в другой программе
+    if is_file_open(input_file):
+        raise PermissionError(f"Файл {input_file} открыт в другой программе. Закройте его и повторите попытку.")
+
+    # Проверка прав доступа для записи в выходной файл
+    if not check_file_access(output_file):
+        raise PermissionError(f"Нет прав на запись в файл: {output_file}")
+
+    try:
+        wb = load_workbook(input_file)
+
+        # Проверка на существование листа 'Result', если уже был создан
+        if 'Result' in wb.sheetnames:
+            result_sheet = wb['Result']
+            wb.remove(result_sheet)
+
+        result_sheet = wb.create_sheet('Result')
+
+        # Объединение ячеек и запись заголовков
+        result_sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=10)
+        result_sheet['A1'] = f"Результаты {Path(input_file).stem}"
+
+        subjects = [sheet for sheet in wb.sheetnames if sheet != 'Result']
+        for col, subject in enumerate(subjects, start=4):
+            result_sheet.cell(row=2, column=col, value=subject)
+
+        result_sheet.cell(row=2, column=len(subjects) + 4, value="Средний балл по всем предметам")
+
+        students = []
+        subject_sheet = wb[subjects[0]]
+        for i in range(4, subject_sheet.max_row + 1):
+            students.append(f"{subject_sheet.cell(row=i, column=1).value} {subject_sheet.cell(row=i, column=2).value}")
+
+        all_averages = {student: [] for student in students}
+
+        for col, subject in enumerate(subjects, start=4):
+            subject_sheet = wb[subject]
+
+            sr_col = None
+            for col_idx in range(1, subject_sheet.max_column + 1):
+                if subject_sheet.cell(row=2, column=col_idx).value == "СР":
+                    sr_col = col_idx
+                    break
+
+            if sr_col:
+                for i, student in enumerate(students, start=4):
+                    grade = subject_sheet.cell(row=i, column=sr_col).value
+                    grade = extract_digit(str(grade))
+                    all_averages[student].append(grade)
+                    result_sheet.cell(row=i - 1, column=col, value=grade)
+
+        for row, student in enumerate(students, start=3):
+            result_sheet.cell(row=row, column=1, value=row - 2)
+            result_sheet.cell(row=row, column=2, value=student)
+
+            total_average = sum(all_averages[student]) / len(subjects)
+            result_sheet.cell(row=row, column=len(subjects) + 4, value=round(total_average, 2))
+
+        # Создание нового имени файла с суффиксом '-result'
+        input_path = Path(input_file)
+        output_file = input_path.with_name(input_path.stem + '-result' + input_path.suffix)
+
+        # Преобразование пути для сохранения в формат с прямыми слэшами
+        output_file = output_file.as_posix()
+
+        # Сохранение файла
+        wb.save(output_file)
+        print(f"Файл сохранен: {output_file}")
+
+    except PermissionError as e:
+        print(f"Ошибка доступа: {e}")
+    except FileNotFoundError as e:
+        print(f"Файл не найден: {e}")
+    except Exception as e:
+        print(f"Произошла ошибка: {e}")
 
 
-    # Записываем название класса в объединенную ячейку A1
-    subjects = [subject for subject in wb.sheetnames if subject != 'Result']
-    result_sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(subjects) + 3)
+def start_ui():
+    # Создание главного окна
+    root = tk.Tk()
+    root.title("Kundoluk Parser")
 
-    # ////////////////////////////////////////////////
-    input_path = Path(input_file)
-    file_name = input_path.stem
-    result_sheet['A1'] = f"{file_name} результаты"
-    # ////////////////////////////////////////////////
+    # Настройка стилей для ttk
+    style = ttk.Style()
+    style.configure("RoundedButton.TButton",
+                    background="#3C3E52",  # Цвет фона по умолчанию
+                    foreground="#FFFFFF",  # Цвет текста по умолчанию
+                    font=("Arial", 14),  # Кастомный шрифт
+                    padding=10,
+                    bd=2)
 
-    # Устанавливаем заголовки "Ученик" (объединенные B2 и C2)
-    result_sheet.merge_cells('B2:C2')
-    result_sheet['B2'] = 'Ученик'
+    # Настройки для изменения кнопки при наведении
+    style.map("RoundedButton.TButton",
+              background=[("active", "#FFFFFF"),  # Цвет фона при наведении (светлый)
+                          ("!active", "#333333")],  # Цвет фона в неактивном состоянии (темный)
+              foreground=[("active", "#FFFFFF"),  # Цвет текста при наведении (темный)
+                          ("!active", "#333333")]),  # Цвет текста в неактивном состоянии (белый)
 
-    # Записываем названия предметов в строку 2
-    for col, subject in enumerate(subjects, start=4):
-        result_sheet.cell(row=2, column=col, value=subject)
+    # Установка курсора для кнопки
+    style.map("RoundedButton.TButton",
+              cursor=[("active", "hand2")])  # Изменяет курсор на "hand2" (рука при наведении)
 
-    # Заголовок для средней оценки по всем предметам
-    result_sheet.cell(row=2, column=len(subjects) + 4, value="Средний балл по всем предметам")
+    # Установка фоновых цветов для окна
+    root.config(bg="#F6F6F6")
 
-    # Получение списка учеников с первого листа
-    subject_sheet = wb[subjects[0]]
-    students = [
-        f"{str(subject_sheet.cell(row=i, column=1).value)} {str(subject_sheet.cell(row=i, column=2).value)}"
-        for i in range(4, subject_sheet.max_row + 1)
-    ]
+    # Заголовки
+    tk.Label(root, text="Введите класс (например, 4Б):", font=("Arial", 14, "bold"), bg="#F6F6F6", fg="#3C3E52").grid(row=0,
+                                                                                                              column=0,
+                                                                                                              padx=10,
+                                                                                                              pady=10)
+    tk.Label(root, text="Введите четверть (число):", font=("Arial", 14, "bold"), bg="#F6F6F6", fg="#3C3E52").grid(row=1,
+                                                                                                          column=0,
+                                                                                                          padx=10,
+                                                                                                          pady=10)
 
-    # Массив для хранения всех оценок по всем предметам для каждого ученика
-    all_averages = {student: [] for student in students}
+    # Поля ввода
+    grade_entry = tk.Entry(root, font=("Arial", 12), bd=2, relief="solid", width=20)
+    quarter_entry = tk.Entry(root, font=("Arial", 12), bd=2, relief="solid", width=20)
 
-    # Пройдемся по каждому листу, чтобы получить оценки
-    for col, subject_name in enumerate(subjects, start=4):
-        subject_sheet = wb[subject_name]
+    grade_entry.grid(row=0, column=1, padx=10, pady=10)
+    quarter_entry.grid(row=1, column=1, padx=10, pady=10)
 
-        # Поиск колонки с текстом "СР" (предположим, что она в 2-й строке)
-        sr_col = None
-        for col_idx in range(1, subject_sheet.max_column + 1):
-            if subject_sheet.cell(row=2, column=col_idx).value == "СР":  # Ищем колонку "СР"
-                sr_col = col_idx
-                break
+    # Функция для обработки отправки
+    def submit():
+        grade = grade_entry.get().strip().upper()
+        quarter = quarter_entry.get().strip()
 
-        # Если нашли колонку "СР", копируем оценки для всех учеников
-        if sr_col:
-            # Записываем название предмета в строку 3 в колонку результата
-            result_sheet.cell(row=3, column=col, value=subject_name)
+        if not grade or not quarter.isdigit():
+            messagebox.showerror("Ошибка", "Введите корректные значения!")
+            return
 
-            # Копируем средние баллы для каждого ученика
-            for i, student in enumerate(students, start=4):
-                grade = subject_sheet.cell(row=i, column=sr_col).value
-                grade = extract_digit(str(grade))  # Извлекаем число из строки, теперь поддерживаем дробные числа
-                all_averages[student].append(grade)  # Добавляем оценку в общий список
-                result_sheet.cell(row=i - 1, column=col, value=grade)  # Записываем оценку в итоговую таблицу (сдвиг на 1 вниз)
+        try:
+            quarter = int(quarter)
+            parser = KParser()
+            parser.magic(grade, quarter)  # передаем данные в magic()
 
-    # Заполняем средние оценки по всем предметам для каждого ученика
-    for row, student in enumerate(students, start=3):
-        result_sheet.cell(row=row, column=1, value=row - 2)  # Номер ученика
-        result_sheet.cell(row=row, column=2, value=student)
+            # Генерация выходного файла
+            input_file = f'./data/{grade}-{quarter}.xlsx'
+            output_file = f'./data/{grade}-{quarter}-result.xlsx'
+            calculate_averages(input_file, output_file)
 
-        # Рассчитываем средний балл по всем предметам для каждого ученика (с округлением)
-        total_average = sum(all_averages[student]) / len(subjects)
-        result_sheet.cell(row=row, column=len(subjects) + 4, value=round(total_average, 2))  # Округление для среднего балла по всем предметам
+            messagebox.showinfo("Успех", f"Файл сохранен: {output_file}")
+        except Exception as e:
+            messagebox.showerror("Ошибка", str(e))
 
-    # Сохраняем новый файл
-    wb.save(output_file)
+    # Кнопка с округленными углами и изменением стилей при наведении
+    submit_button = ttk.Button(root, text="Отправить", style="RoundedButton.TButton", command=submit)
+    submit_button.grid(row=2, column=0, columnspan=2, pady=5)
 
-# def start_ui():
-#     # Код интерфейса
-#     root = tk.Tk()
-#     root.title("Kundoluk Parser")
-#
-#     tk.Label(root, text="Введите класс (например, 4Б):").grid(row=0, column=0)
-#     tk.Label(root, text="Введите четверть (число):").grid(row=1, column=0)
-#
-#     grade_entry = tk.Entry(root)
-#     quarter_entry = tk.Entry(root)
-#
-#     grade_entry.grid(row=0, column=1)
-#     quarter_entry.grid(row=1, column=1)
-#
-#     def submit():
-#         grade = grade_entry.get().strip().upper()
-#         quarter = quarter_entry.get().strip()
-#         if not grade or not quarter.isdigit():
-#             messagebox.showerror("Ошибка", "Введите корректные значения!")
-#             return
-#         try:
-#             quarter = int(quarter)
-#             parser = KParser()
-#             result_grade = parser.get_grade((grade, dict(parser.grades).get(grade)), quarter)
-#
-#             input_file = f'./data/{grade}-{quarter}.xlsx'
-#             output_file = f'./data/{grade}-{quarter}-result.xlsx'
-#             calculate_averages(input_file, output_file)
-#
-#             messagebox.showinfo("Успех", f"Файл сохранен: {output_file}")
-#         except Exception as e:
-#             messagebox.showerror("Ошибка", str(e))
-#
-#     tk.Button(root, text="Обработать", command=submit).grid(row=2, column=0, columnspan=2)
-#
-#     root.mainloop()
-
+    root.mainloop()
 
 def main():
-    parser = KParser()
-    parser.magic()  # Запуск основной логики
+    # parser = KParser()
+    # parser.magic()  # Запуск основной логики
+    start_ui()
 
 if __name__ == "__main__":
     main()
