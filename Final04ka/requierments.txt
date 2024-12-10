@@ -1,0 +1,7 @@
+pandas
+requests
+bs4
+xlsxwriter
+lxml
+openpyxl
+pathlib
