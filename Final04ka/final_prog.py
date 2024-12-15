@@ -6,10 +6,8 @@ from threading import Thread
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
-from pandas import DataFrame
 
 from openpyxl.chart import PieChart, Reference
-
 from openpyxl import load_workbook
 from pathlib import Path
 import re
@@ -181,6 +179,7 @@ class KParser:
             for subject, table in grade_data.subjects.items():
                 grade_data.subjects[subject] = table.replace(0, '')
 
+
             output_dir = os.getcwd()  # Основная папка для сохранения
             input_file = grade_data.to_excel(output_dir)  # Сохранение данных в файл с преобразованием
 
@@ -188,6 +187,7 @@ class KParser:
 
             # Путь к файлу, который будем изменять
             output_file = input_file
+            self.remove_empty_sheets(output_file)
             print(f"Генерация результата в файл: {output_file}")
 
             if not output_file:
@@ -195,13 +195,30 @@ class KParser:
 
             calculate_averages(input_file, output_file)  # Расчет средних баллов и сохранение в тот же файл
 
-            print(f'Результаты сохранены в файл: {output_file}')
+            # Удаление пустых страниц
+            self.remove_empty_sheets(output_file)
 
         except Exception as e:
             import traceback
-            print(f"Ошибка: {e}")
-            print("Traceback:")
-            print(traceback.format_exc())
+
+    def remove_empty_sheets(self, file_path: str) -> None:
+        """Удаляет пустые страницы из файла Excel."""
+        try:
+            workbook = load_workbook(file_path)
+            sheets_to_delete = []
+
+            for sheet_name in workbook.sheetnames:
+                sheet = workbook[sheet_name]
+                if all(cell.value is None for row in sheet.iter_rows() for cell in row):
+                    sheets_to_delete.append(sheet_name)
+
+            for sheet_name in sheets_to_delete:
+                del workbook[sheet_name]
+
+            workbook.save(file_path)
+
+        except Exception as e:
+            print(f"Ошибка при удалении пустых страниц: {e}")
 
 
 def extract_digit(text):
@@ -299,7 +316,7 @@ def calculate_averages(input_file, output_file):
             wb.remove(wb['Result'])
 
         # Создаём новый лист 'Result'
-        result_sheet = wb.create_sheet('Result')
+        result_sheet = wb.create_sheet('Result', 0)
 
         # Объединяем ячейки для заголовка и записываем его
         result_sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=10)
@@ -316,13 +333,20 @@ def calculate_averages(input_file, output_file):
         result_sheet.cell(row=2, column=len(subjects) + 4, value="Средний балл по всем предметам")
 
 
-        # Собираем список студентов из первого предмета
-        students = []
-        first_subject_sheet = wb[subjects[0]]
-        for i in range(4, first_subject_sheet.max_row + 1):
-            last_name = first_subject_sheet.cell(row=i, column=1).value
-            first_name = first_subject_sheet.cell(row=i, column=2).value
-            students.append(f"{last_name} {first_name}")
+        # Собираем список студентов со всех предметов
+        students = set()  # Используем set для исключения дублирования
+        for subject in subjects:
+            subject_sheet = wb[subject]
+
+            # Начинаем с ячейки B4
+            for i in range(4, subject_sheet.max_row + 1):
+                student_name = subject_sheet.cell(row=i, column=2).value  # Имя и фамилия в колонке B
+
+                # Пропускаем выбывших студентов
+                if student_name and "Выбыл(а)" not in student_name:
+                    students.add(student_name)  # Добавляем уникального студента в set
+
+        students = sorted(list(students))  # Сортируем список студентов в алфавитном порядке
 
         # Инициализируем словарь для хранения оценок по каждому студенту
         all_averages = {student: [] for student in students}
@@ -359,11 +383,13 @@ def calculate_averages(input_file, output_file):
 
         # Сохраняем обновлённый файл
         wb.save(output_file)
+        os.startfile(input_file, 'open')
+
 
     except PermissionError as e:
         print(f"Ошибка доступа: {e}")
     except Exception as e:
-        print(f"Произошла ошибка: {e}")
+        print(f"")
 
 def is_file_open(file_path):
     """Проверяет, открыт ли файл в другой программе."""
@@ -396,15 +422,11 @@ def perform_task(grade, quarter):
 
         input_file = grade_data.to_excel(data_dir)  # Сохранение данных в файл
 
-        # Создаем файл для результатов
-        output_file = input_file.replace(".xlsx", "-result.xlsx")
-        calculate_averages(input_file, output_file)  # Расчет и сохранение результатов
+        calculate_averages(input_file)  # Расчет и сохранение результатов
 
     except Exception as e:
-        print(f"Ошибка: {e}")
+        print("")
 
-    except Exception as e:
-        print(f"Ошибка: {e}")
 
 
 def center_window(window, width, height):
@@ -486,17 +508,13 @@ def start_ui():
         return preloader, progress
 
     def perform_task(grade, quarter, preloader):
-        try:
-            # Ваш код для обработки данных
-            parser = KParser()
-            parser.magic(grade, quarter)
+        parser = KParser()
+        parser.magic(grade, quarter)
 
-            input_file = f'./data/{grade}-{quarter}.xlsx'
-            output_file = f'./data/{grade}-{quarter}-result.xlsx'
-            calculate_averages(input_file, output_file)
-
-        finally:
-            preloader.destroy()  # Закрываем прелоадер после завершения
+        input_file = f'./data/{grade}-{quarter}/{grade}-{quarter}.xlsx'
+        output_file = input_file
+        calculate_averages(input_file, output_file)
+        preloader.destroy()
 
     def submit_with_preloader():
         """
