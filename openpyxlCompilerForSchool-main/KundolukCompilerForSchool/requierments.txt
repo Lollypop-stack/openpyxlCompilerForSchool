@@ -1,0 +1,3 @@
+Use this command to install all required packages for PyCharm:
+
+pip install pandas requests beautifulsoup4 xlsxwriter lxml openpyxl pathlib
